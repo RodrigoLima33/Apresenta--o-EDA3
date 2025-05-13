@@ -1,0 +1,4 @@
+TX01|1|1000,00|Manaus
+TX02|1|2500,00|Manaus
+TX03|1|1500,00|Manaus
+TX04|1|500,00|Amapa
