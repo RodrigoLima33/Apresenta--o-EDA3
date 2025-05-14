@@ -6,6 +6,7 @@
 
 #define MAX_TRANSACOES 100
 #define MAX_USUARIOS 10
+#define ORDEM 3
 #define DADOS_FILE "transacoes.txt"
 #define INDEX_FILE "indices.txt"
 
@@ -29,9 +30,127 @@ Usuario usuarios[MAX_USUARIOS];
 int totalTransacoes = 0;
 int totalUsuarios = 0;
 
+// Estrutura da arvore-B
+typedef struct NoB
+{
+    int numChaves;
+    char chaves[ORDEM - 1][10];
+    struct NoB *filhos[ORDEM];
+    bool folha;
+} NoB;
+
+NoB *raiz = NULL;
+
+NoB *criarNo(bool folha)
+{
+    NoB *no = (NoB *)malloc(sizeof(NoB));
+    no->folha = folha;
+    no->numChaves = 0;
+    for (int i = 0; i < ORDEM; i++)
+        no->filhos[i] = NULL;
+    return no;
+}
+
+void dividirFilho(NoB *pai, int i, NoB *y)
+{
+    NoB *z = criarNo(y->folha);
+    z->numChaves = 1;
+
+    strcpy(z->chaves[0], y->chaves[1]);
+
+    if (!y->folha)
+    {
+        z->filhos[0] = y->filhos[2];
+        z->filhos[1] = y->filhos[3];
+    }
+
+    y->numChaves = 1;
+
+    for (int j = pai->numChaves; j >= i + 1; j--)
+        pai->filhos[j + 1] = pai->filhos[j];
+    pai->filhos[i + 1] = z;
+
+    for (int j = pai->numChaves - 1; j >= i; j--)
+        strcpy(pai->chaves[j + 1], pai->chaves[j]);
+    strcpy(pai->chaves[i], y->chaves[1]);
+    pai->numChaves++;
+}
+
+void inserirNaoCheio(NoB *no, char *chave)
+{
+    int i = no->numChaves - 1;
+
+    if (no->folha)
+    {
+        while (i >= 0 && strcmp(chave, no->chaves[i]) < 0)
+        {
+            strcpy(no->chaves[i + 1], no->chaves[i]);
+            i--;
+        }
+        strcpy(no->chaves[i + 1], chave);
+        no->numChaves++;
+    }
+    else
+    {
+        while (i >= 0 && strcmp(chave, no->chaves[i]) < 0)
+            i--;
+        i++;
+        if (no->filhos[i]->numChaves == ORDEM - 1)
+        {
+            dividirFilho(no, i, no->filhos[i]);
+            if (strcmp(chave, no->chaves[i]) > 0)
+                i++;
+        }
+        inserirNaoCheio(no->filhos[i], chave);
+    }
+}
+
+void inserirArvoreB(char *chave)
+{
+    if (!raiz)
+    {
+        raiz = criarNo(true);
+        strcpy(raiz->chaves[0], chave);
+        raiz->numChaves = 1;
+    }
+    else
+    {
+        if (raiz->numChaves == ORDEM - 1)
+        {
+            NoB *s = criarNo(false);
+            s->filhos[0] = raiz;
+            dividirFilho(s, 0, raiz);
+
+            int i = 0;
+            if (strcmp(chave, s->chaves[0]) > 0)
+                i++;
+            inserirNaoCheio(s->filhos[i], chave);
+            raiz = s;
+        }
+        else
+        {
+            inserirNaoCheio(raiz, chave);
+        }
+    }
+}
+
+bool buscarArvoreB(NoB *no, char *chave)
+{
+    int i = 0;
+    while (i < no->numChaves && strcmp(chave, no->chaves[i]) > 0)
+        i++;
+
+    if (i < no->numChaves && strcmp(chave, no->chaves[i]) == 0)
+        return true;
+
+    if (no->folha)
+        return false;
+
+    return buscarArvoreB(no->filhos[i], chave);
+}
+
 void carregarUsuarios()
 {
-    // Definindo usuários diretamente no código
     usuarios[0].id = 1;
     usuarios[0].mediaMensal = 500.00;
     strcpy(usuarios[0].localizacaoAtual, "Manaus");
@@ -40,11 +159,7 @@ void carregarUsuarios()
     usuarios[1].mediaMensal = 3000.00;
     strcpy(usuarios[1].localizacaoAtual, "Amapa");
 
-    usuarios[1].id = 3;
-    usuarios[1].mediaMensal = 5000.00;
-    strcpy(usuarios[1].localizacaoAtual, "Franca");
-
-    totalUsuarios = 3; // Atualiza o contador de usuários
+    totalUsuarios = 2;
 }
 
 Usuario *encontrarUsuario(int id)
@@ -62,21 +177,40 @@ bool transacaoSuspeita(Transacao *t, Usuario *u)
     bool valorAlto = t->valor > 3 * u->mediaMensal;
     bool localDiferente = strcmp(t->localizacao, u->localizacaoAtual) != 0;
     bool internacionalComBaixaMedia = strstr(t->localizacao, "internacional") != NULL && u->mediaMensal < 1000;
-
     return valorAlto || localDiferente || internacionalComBaixaMedia;
 }
 
 void salvarTransacaoEmArquivo(Transacao *t)
 {
     FILE *fp = fopen(DADOS_FILE, "a");
-    FILE *index = fopen(INDEX_FILE, "a");
-    if (fp && index)
+    if (fp)
     {
         fprintf(fp, "%s|%d|%.2f|%s\n", t->codigo, t->id, t->valor, t->localizacao);
-        fprintf(index, "%s\n", t->codigo);
+        fclose(fp);
     }
-    fclose(fp);
-    fclose(index);
+    inserirArvoreB(t->codigo);
+}
+
+void buscarTransacao(char *codigo)
+{
+    if (buscarArvoreB(raiz, codigo))
+    {
+        FILE *fp = fopen(DADOS_FILE, "r");
+        char linha[200];
+        while (fgets(linha, sizeof(linha), fp))
+        {
+            if (strncmp(linha, codigo, strlen(codigo)) == 0)
+            {
+                printf("\nTransacao encontrada: %s", linha);
+                break;
+            }
+        }
+        fclose(fp);
+    }
+    else
+    {
+        printf("\nTransacao com codigo %s nao encontrada.\n", codigo);
+    }
 }
 
 void listarTransacoes()
@@ -86,7 +220,7 @@ void listarTransacoes()
         return;
 
     char linha[200];
-    printf("\nLista de transacoes ordenadas por chave primaria (codigo):\n");
+    printf("\nLista de transacoes:\n");
     while (fgets(linha, sizeof(linha), fp))
     {
         printf("%s", linha);
@@ -94,71 +228,9 @@ void listarTransacoes()
     fclose(fp);
 }
 
-void buscarTransacao(char *codigo)
-{
-    FILE *fp = fopen(DADOS_FILE, "r");
-    if (!fp)
-        return;
-
-    char linha[200];
-    while (fgets(linha, sizeof(linha), fp))
-    {
-        if (strncmp(linha, codigo, strlen(codigo)) == 0)
-        {
-            printf("\nTransacao encontrada: %s", linha);
-            fclose(fp);
-            return;
-        }
-    }
-    printf("\nTransacao com codigo %s nao encontrada.\n", codigo);
-    fclose(fp);
-}
-
-void modificarTransacao(char *codigo)
-{
-    FILE *fp = fopen(DADOS_FILE, "r");
-    FILE *tmp = fopen("temp.txt", "w");
-    if (!fp || !tmp)
-        return;
-
-    char linha[200];
-    bool encontrado = false;
-
-    while (fgets(linha, sizeof(linha), fp))
-    {
-        if (strncmp(linha, codigo, strlen(codigo)) == 0)
-        {
-            Transacao t;
-            sscanf(linha, "%[^|]|%d|%lf|%[^\n]", t.codigo, &t.id, &t.valor, t.localizacao);
-            printf("Novo valor: ");
-            scanf("%lf", &t.valor);
-            printf("Nova localizacao: ");
-            scanf("%s", t.localizacao);
-            fprintf(tmp, "%s|%d|%.2f|%s\n", t.codigo, t.id, t.valor, t.localizacao);
-            encontrado = true;
-        }
-        else
-        {
-            fprintf(tmp, "%s", linha);
-        }
-    }
-
-    fclose(fp);
-    fclose(tmp);
-
-    remove(DADOS_FILE);
-    rename("temp.txt", DADOS_FILE);
-
-    if (encontrado)
-        printf("\nTransacao modificada com sucesso.\n");
-    else
-        printf("\nTransacao nao encontrada.\n");
-}
-
 int main()
 {
-    setlocale(LC_ALL, "PORTUGUESE");
-    system("chcp 65001 > nul");
+    setlocale(LC_ALL, "C");
 
     carregarUsuarios();
 
@@ -167,9 +239,8 @@ int main()
     {
         printf("\n--- MENU ---\n");
         printf("1. Inserir transacao\n");
-        printf("2. Modificar transacao\n");
-        printf("3. Buscar transacao\n");
-        printf("4. Listar transacoes\n");
+        printf("2. Buscar transacao\n");
+        printf("3. Listar transacoes\n");
         printf("0. Sair\n");
         printf("Escolha: ");
         scanf("%d", &opcao);
@@ -187,20 +258,16 @@ int main()
             sprintf(t.codigo, "TX%02d", totalTransacoes + 1);
 
             Usuario *u = encontrarUsuario(t.id);
-            if (u == NULL)
+            if (!u)
             {
                 printf("Usuario nao encontrado.\n");
                 continue;
             }
 
             if (transacaoSuspeita(&t, u))
-            {
                 printf(">> Transacao %s eh SUSPEITA para Usuario %d\n", t.codigo, u->id);
-            }
             else
-            {
                 printf("Transacao %s esta OK\n", t.codigo);
-            }
 
             salvarTransacaoEmArquivo(&t);
             totalTransacoes++;
@@ -208,18 +275,11 @@ int main()
         else if (opcao == 2)
         {
             char codigo[10];
-            printf("Codigo da transacao a modificar: ");
-            scanf("%s", codigo);
-            modificarTransacao(codigo);
-        }
-        else if (opcao == 3)
-        {
-            char codigo[10];
             printf("Codigo da transacao a buscar: ");
             scanf("%s", codigo);
             buscarTransacao(codigo);
         }
-        else if (opcao == 4)
+        else if (opcao == 3)
         {
             listarTransacoes();
         }
