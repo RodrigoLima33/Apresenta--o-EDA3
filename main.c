@@ -8,7 +8,6 @@
 #define MAX_USUARIOS 10
 #define ORDEM 3
 #define DADOS_FILE "transacoes.txt"
-#define INDEX_FILE "indices.txt"
 
 typedef struct
 {
@@ -16,6 +15,8 @@ typedef struct
     double valor;
     char localizacao[50];
     char codigo[10];
+    int hora;   // Novo campo
+    int minuto; // Novo campo
 } Transacao;
 
 typedef struct
@@ -25,12 +26,6 @@ typedef struct
     char localizacaoAtual[50];
 } Usuario;
 
-Transacao transacoes[MAX_TRANSACOES];
-Usuario usuarios[MAX_USUARIOS];
-int totalTransacoes = 0;
-int totalUsuarios = 0;
-
-// Estrutura da arvore-B
 typedef struct NoB
 {
     int numChaves;
@@ -39,6 +34,10 @@ typedef struct NoB
     bool folha;
 } NoB;
 
+Transacao transacoes[MAX_TRANSACOES];
+Usuario usuarios[MAX_USUARIOS];
+int totalTransacoes = 0;
+int totalUsuarios = 0;
 NoB *raiz = NULL;
 
 NoB *criarNo(bool folha)
@@ -172,12 +171,22 @@ Usuario *encontrarUsuario(int id)
     return NULL;
 }
 
-bool transacaoSuspeita(Transacao *t, Usuario *u)
+bool transacaoSuspeita(Transacao *t, Usuario *u, Transacao *ultima)
 {
     bool valorAlto = t->valor > 3 * u->mediaMensal;
     bool localDiferente = strcmp(t->localizacao, u->localizacaoAtual) != 0;
     bool internacionalComBaixaMedia = strstr(t->localizacao, "internacional") != NULL && u->mediaMensal < 1000;
-    return valorAlto || localDiferente || internacionalComBaixaMedia;
+    bool horarioIncomum = t->hora >= 0 && t->hora < 5;
+
+    bool duplicada = false;
+    if (ultima != NULL)
+    {
+        duplicada = (t->id == ultima->id &&
+                     t->valor == ultima->valor &&
+                     strcmp(t->localizacao, ultima->localizacao) == 0);
+    }
+
+    return valorAlto || localDiferente || internacionalComBaixaMedia || horarioIncomum || duplicada;
 }
 
 void salvarTransacaoEmArquivo(Transacao *t)
@@ -185,7 +194,8 @@ void salvarTransacaoEmArquivo(Transacao *t)
     FILE *fp = fopen(DADOS_FILE, "a");
     if (fp)
     {
-        fprintf(fp, "%s|%d|%.2f|%s\n", t->codigo, t->id, t->valor, t->localizacao);
+        fprintf(fp, "%s|%d|%.2f|%s|%02d:%02d\n",
+                t->codigo, t->id, t->valor, t->localizacao, t->hora, t->minuto);
         fclose(fp);
     }
     inserirArvoreB(t->codigo);
@@ -233,6 +243,7 @@ int main()
     setlocale(LC_ALL, "C");
 
     carregarUsuarios();
+    Transacao ultimaTransacao = {0};
 
     int opcao;
     do
@@ -255,6 +266,11 @@ int main()
             scanf("%lf", &t.valor);
             printf("Localizacao: ");
             scanf("%s", t.localizacao);
+            printf("Hora da transacao (0-23): ");
+            scanf("%d", &t.hora);
+            printf("Minuto da transacao (0-59): ");
+            scanf("%d", &t.minuto);
+
             sprintf(t.codigo, "TX%02d", totalTransacoes + 1);
 
             Usuario *u = encontrarUsuario(t.id);
@@ -264,12 +280,13 @@ int main()
                 continue;
             }
 
-            if (transacaoSuspeita(&t, u))
+            if (transacaoSuspeita(&t, u, (totalTransacoes > 0 ? &ultimaTransacao : NULL)))
                 printf(">> Transacao %s eh SUSPEITA para Usuario %d\n", t.codigo, u->id);
             else
                 printf("Transacao %s esta OK\n", t.codigo);
 
             salvarTransacaoEmArquivo(&t);
+            ultimaTransacao = t;
             totalTransacoes++;
         }
         else if (opcao == 2)
