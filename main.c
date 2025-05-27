@@ -4,8 +4,7 @@
 #include <stdbool.h>
 
 #define ORDEM 3
-#define TAM_CODIGO 6
-#define MAX_TRANSACOES 1000
+#define TAM_CODIGO 10
 
 typedef struct
 {
@@ -16,7 +15,7 @@ typedef struct
     char horario[6];
 } Transacao;
 
-typedef struct Indice
+typedef struct
 {
     char codigo[TAM_CODIGO];
     long posicao;
@@ -152,7 +151,7 @@ float calcularMediaUsuario(int id)
     float val;
     while (fgets(linha, sizeof(linha), f))
     {
-        sscanf(linha, "TX%*[^|]|%d|%f|%*[^|]|%*[^\n]", &uid, &val);
+        sscanf(linha, "%*[^|]|%d|%f|%*[^|]|%*[^|]", &uid, &val);
         if (uid == id)
         {
             soma += val;
@@ -172,7 +171,7 @@ bool transacaoEhDuplicada(Transacao *nova)
     Transacao t;
     while (fgets(linha, sizeof(linha), f))
     {
-        sscanf(linha, "%[^|]|%d|%f|%[^|]|%[^\n]", t.codigo, &t.idUsuario, &t.valor, t.local, t.horario);
+        sscanf(linha, "%[^|]|%d|%f|%[^|]|%[^|\n]", t.codigo, &t.idUsuario, &t.valor, t.local, t.horario);
         if (t.idUsuario == nova->idUsuario &&
             t.valor == nova->valor &&
             strcmp(t.local, nova->local) == 0 &&
@@ -196,7 +195,7 @@ bool localDiferente(int id, const char *localAtual)
     char loc[50];
     while (fgets(linha, sizeof(linha), f))
     {
-        sscanf(linha, "TX%*[^|]|%d|%*f|%[^|]|%*[^\n]", &uid, loc);
+        sscanf(linha, "%*[^|]|%d|%*f|%[^|]|%*[^|\n]", &uid, loc);
         if (uid == id && strcmp(loc, localAtual) != 0)
         {
             fclose(f);
@@ -267,12 +266,12 @@ void inserirTransacao()
     printf("Valor: ");
     scanf("%f", &t.valor);
     printf("Localizacao: ");
-    scanf("%s", t.local);
+    scanf("%49s", t.local);
     printf("Horario (HH:MM): ");
-    scanf("%s", t.horario);
+    scanf("%5s", t.horario);
 
     if (transacaoEhSuspeita(&t))
-        printf(">> Transacao %s eh SUSPEITA para Usuario %d\n", codigo, t.idUsuario);
+        printf(">> Transacao %s eh SUSPEITA\n", codigo);
     else
         printf("Transacao %s esta OK\n", codigo);
 
@@ -281,21 +280,19 @@ void inserirTransacao()
     long posicao = ftell(f);
     fprintf(f, "%s|%d|%.2f|%s|%s\n", codigo, t.idUsuario, t.valor, t.local, t.horario);
     fclose(f);
-    printf("Transacao salva em transacoes.txt\n");
-
     salvarIndice(codigo, posicao);
-    printf("Indice %s salvo com sucesso em indices.txt\n", codigo);
+    printf("Transacao salva.\n");
 }
 
 void buscarTransacao()
 {
     char codigo[TAM_CODIGO];
-    printf("Codigo da transacao a buscar: ");
+    printf("Codigo da transacao: ");
     scanf("%s", codigo);
     long pos = buscarIndice(raiz, codigo);
     if (pos == -1)
     {
-        printf("Transacao com codigo %s nao encontrada no indice.\n", codigo);
+        printf("Transacao nao encontrada.\n");
         return;
     }
     FILE *f = fopen("transacoes.txt", "r");
@@ -303,7 +300,7 @@ void buscarTransacao()
     char linha[200];
     fgets(linha, sizeof(linha), f);
     fclose(f);
-    printf("Transacao encontrada: %s", linha);
+    printf(">> %s", linha);
 }
 
 void listarTransacoes()
@@ -312,11 +309,105 @@ void listarTransacoes()
     if (!f)
         return;
     char linha[200];
-    printf("\nLista de transacoes:\n");
+    printf("\nTransacoes:\n");
     while (fgets(linha, sizeof(linha), f))
         printf("%s", linha);
     fclose(f);
 }
+
+void modificarTransacao()
+{
+    char codigo[TAM_CODIGO];
+    printf("Codigo da transacao a modificar: ");
+    scanf("%s", codigo);
+    long pos = buscarIndice(raiz, codigo);
+    if (pos == -1)
+    {
+        printf("Transacao nao encontrada.\n");
+        return;
+    }
+
+    FILE *f = fopen("transacoes.txt", "r");
+    if (!f)
+    {
+        printf("Erro ao abrir o arquivo de transacoes.\n");
+        return;
+    }
+
+    char linha[200];
+    Transacao transacoes[1000];
+    char codigos[1000][TAM_CODIGO];
+    int count = 0;
+
+    while (fgets(linha, sizeof(linha), f))
+    {
+        sscanf(linha, "%[^|]|%d|%f|%[^|]|%s", codigos[count], &transacoes[count].idUsuario,
+               &transacoes[count].valor, transacoes[count].local, transacoes[count].horario);
+        count++;
+    }
+    fclose(f);
+
+    int i;
+    for (i = 0; i < count; i++)
+    {
+        if (strcmp(codigos[i], codigo) == 0)
+            break;
+    }
+
+    if (i == count)
+    {
+        printf("Transacao nao encontrada na lista.\n");
+        return;
+    }
+
+    printf("Novo ID do Usuario: ");
+    scanf("%d", &transacoes[i].idUsuario);
+    printf("Novo Valor: ");
+    scanf("%f", &transacoes[i].valor);
+    printf("Nova Localizacao: ");
+    scanf("%49s", transacoes[i].local);
+    printf("Novo Horario (HH:MM): ");
+    scanf("%5s", transacoes[i].horario);
+
+    f = fopen("transacoes.txt", "w");
+    if (!f)
+    {
+        printf("Erro ao reabrir o arquivo de transacoes.\n");
+        return;
+    }
+
+    long novaPosicao;
+    for (int j = 0; j < count; j++)
+    {
+        long posAtual = ftell(f);
+        fprintf(f, "%s|%d|%.2f|%s|%s\n", codigos[j],
+                transacoes[j].idUsuario, transacoes[j].valor,
+                transacoes[j].local, transacoes[j].horario);
+        if (j == i)
+            novaPosicao = posAtual;
+    }
+    fclose(f);
+
+    FILE *fi = fopen("indices.txt", "w");
+    if (!fi)
+    {
+        printf("Erro ao atualizar arquivo de indices.\n");
+        return;
+    }
+
+    for (int j = 0; j < count; j++)
+    {
+        long pos = (strcmp(codigos[j], codigo) == 0) ? novaPosicao : buscarIndice(raiz, codigos[j]);
+        fprintf(fi, "%s %ld\n", codigos[j], pos);
+    }
+    fclose(fi);
+
+    raiz = NULL;
+    carregarIndices();
+    printf("Transacao modificada com sucesso.\n");
+}
+
+// ---------------------- MAIN ----------------------
 
 int main()
 {
@@ -328,6 +419,7 @@ int main()
         printf("1. Inserir transacao\n");
         printf("2. Buscar transacao\n");
         printf("3. Listar transacoes\n");
+        printf("4. Modificar transacao\n");
         printf("0. Sair\n");
         printf("Escolha: ");
         if (scanf("%d", &opcao) != 1)
@@ -337,6 +429,7 @@ int main()
             printf("Entrada invalida!\n");
             continue;
         }
+
         switch (opcao)
         {
         case 1:
@@ -347,6 +440,9 @@ int main()
             break;
         case 3:
             listarTransacoes();
+            break;
+        case 4:
+            modificarTransacao();
             break;
         case 0:
             printf("Saindo...\n");
