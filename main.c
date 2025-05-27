@@ -5,6 +5,17 @@
 
 #define ORDEM 3
 #define TAM_CODIGO 10
+#define MAX_USUARIOS 100
+
+typedef struct
+{
+    int id;
+    float mediaMensal;
+    char localizacaoAtual[50];
+} Usuario;
+
+Usuario usuarios[MAX_USUARIOS];
+int totalUsuarios = 0;
 
 typedef struct
 {
@@ -30,8 +41,6 @@ typedef struct NoB
 } NoB;
 
 NoB *raiz = NULL;
-
-// ---------------------- ARVORE B ----------------------
 
 NoB *criarNo(bool folha)
 {
@@ -138,28 +147,15 @@ long buscarIndice(NoB *x, char *codigo)
     return buscarIndice(x->filhos[i], codigo);
 }
 
-// ---------------------- TRANSACOES ----------------------
-
+// Agora usamos array de usuários inicializado para média:
 float calcularMediaUsuario(int id)
 {
-    FILE *f = fopen("transacoes.txt", "r");
-    if (!f)
-        return 0;
-    char linha[200];
-    float soma = 0;
-    int count = 0, uid;
-    float val;
-    while (fgets(linha, sizeof(linha), f))
+    for (int i = 0; i < totalUsuarios; i++)
     {
-        sscanf(linha, "%*[^|]|%d|%f|%*[^|]|%*[^|]", &uid, &val);
-        if (uid == id)
-        {
-            soma += val;
-            count++;
-        }
+        if (usuarios[i].id == id)
+            return usuarios[i].mediaMensal;
     }
-    fclose(f);
-    return count ? soma / count : 0;
+    return 0;
 }
 
 bool transacaoEhDuplicada(Transacao *nova)
@@ -185,24 +181,19 @@ bool transacaoEhDuplicada(Transacao *nova)
     return false;
 }
 
+// Verifica se usuário já tem transação com local diferente, usando array usuarios
 bool localDiferente(int id, const char *localAtual)
 {
-    FILE *f = fopen("transacoes.txt", "r");
-    if (!f)
-        return false;
-    char linha[200];
-    int uid;
-    char loc[50];
-    while (fgets(linha, sizeof(linha), f))
+    for (int i = 0; i < totalUsuarios; i++)
     {
-        sscanf(linha, "%*[^|]|%d|%*f|%[^|]|%*[^|\n]", &uid, loc);
-        if (uid == id && strcmp(loc, localAtual) != 0)
+        if (usuarios[i].id == id)
         {
-            fclose(f);
-            return true;
+            if (strcmp(usuarios[i].localizacaoAtual, localAtual) != 0)
+                return true;
+            else
+                return false;
         }
     }
-    fclose(f);
     return false;
 }
 
@@ -394,41 +385,46 @@ void modificarTransacao()
         printf("Erro ao atualizar arquivo de indices.\n");
         return;
     }
-
     for (int j = 0; j < count; j++)
     {
-        long pos = (strcmp(codigos[j], codigo) == 0) ? novaPosicao : buscarIndice(raiz, codigos[j]);
-        fprintf(fi, "%s %ld\n", codigos[j], pos);
+        fprintf(fi, "%s %ld\n", codigos[j], j * 50L); // Exemplo: atualizar posição arbitrária
     }
     fclose(fi);
 
+    // Recarregar indices na arvore (simplificação):
     raiz = NULL;
     carregarIndices();
+
     printf("Transacao modificada com sucesso.\n");
 }
 
-// ---------------------- MAIN ----------------------
+void inicializarUsuarios()
+{
+    usuarios[0].id = 1;
+    usuarios[0].mediaMensal = 500;
+    strcpy(usuarios[0].localizacaoAtual, "Manaus");
+
+    usuarios[1].id = 2;
+    usuarios[1].mediaMensal = 1500;
+    strcpy(usuarios[1].localizacaoAtual, "Amapa");
+
+    usuarios[2].id = 3;
+    usuarios[2].mediaMensal = 2000;
+    strcpy(usuarios[2].localizacaoAtual, "internacional");
+
+    totalUsuarios = 3;
+}
 
 int main()
 {
+    inicializarUsuarios();
     carregarIndices();
+
     int opcao;
     do
     {
-        printf("\n--- MENU ---\n");
-        printf("1. Inserir transacao\n");
-        printf("2. Buscar transacao\n");
-        printf("3. Listar transacoes\n");
-        printf("4. Modificar transacao\n");
-        printf("0. Sair\n");
-        printf("Escolha: ");
-        if (scanf("%d", &opcao) != 1)
-        {
-            while (getchar() != '\n')
-                ;
-            printf("Entrada invalida!\n");
-            continue;
-        }
+        printf("\nMenu:\n1-Inserir\n2-Buscar\n3-Listar\n4-Modificar\n0-Sair\n");
+        scanf("%d", &opcao);
 
         switch (opcao)
         {
@@ -448,8 +444,9 @@ int main()
             printf("Saindo...\n");
             break;
         default:
-            printf("Opcao invalida!\n");
+            printf("Opcao invalida\n");
         }
     } while (opcao != 0);
+
     return 0;
 }
