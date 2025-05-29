@@ -147,7 +147,6 @@ long buscarIndice(NoB *x, char *codigo)
     return buscarIndice(x->filhos[i], codigo);
 }
 
-// Agora usamos array de usuários inicializado para média:
 float calcularMediaUsuario(int id)
 {
     for (int i = 0; i < totalUsuarios; i++)
@@ -181,7 +180,6 @@ bool transacaoEhDuplicada(Transacao *nova)
     return false;
 }
 
-// Verifica se usuário já tem transação com local diferente, usando array usuarios
 bool localDiferente(int id, const char *localAtual)
 {
     for (int i = 0; i < totalUsuarios; i++)
@@ -206,17 +204,20 @@ bool horarioIncomum(const char *horario)
 
 bool transacaoEhSuspeita(Transacao *t)
 {
+    int suspeitas = 0;
+
     if (t->valor > 3 * calcularMediaUsuario(t->idUsuario))
-        return true;
+        suspeitas++;
     if (localDiferente(t->idUsuario, t->local))
-        return true;
+        suspeitas++;
     if (strcmp(t->local, "internacional") == 0 && t->valor < 1000)
-        return true;
+        suspeitas++;
     if (horarioIncomum(t->horario))
-        return true;
+        suspeitas++;
     if (transacaoEhDuplicada(t))
-        return true;
-    return false;
+        suspeitas++;
+
+    return suspeitas >= 3;
 }
 
 void salvarIndice(const char *codigo, long posicao)
@@ -387,11 +388,10 @@ void modificarTransacao()
     }
     for (int j = 0; j < count; j++)
     {
-        fprintf(fi, "%s %ld\n", codigos[j], j * 50L); // Exemplo: atualizar posição arbitrária
+        fprintf(fi, "%s %ld\n", codigos[j], j * 50L);
     }
     fclose(fi);
 
-    // Recarregar indices na arvore (simplificação):
     raiz = NULL;
     carregarIndices();
 
